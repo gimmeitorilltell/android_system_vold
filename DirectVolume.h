@@ -54,7 +54,7 @@ protected:
     int            mOrigDiskMinor;
     int            mOrigPartMinors[MAX_PARTITIONS];
     int            mDiskNumParts;
-    int            mPendingPartCount;
+    unsigned int   mPendingPartMap;
     int            mIsDecrypted;
     bool           mIsValid;
 
