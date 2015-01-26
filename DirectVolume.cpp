@@ -75,7 +75,7 @@ DirectVolume::DirectVolume(VolumeManager *vm, const fstab_rec* rec, int flags) :
     mPaths = new PathCollection();
     for (int i = 0; i < MAX_PARTITIONS; i++)
         mPartMinors[i] = -1;
-    mPendingPartMap = 0;
+    mPendingPartCount = 0;
     mDiskMajor = -1;
     mDiskMinor = -1;
     mDiskNumParts = 0;
@@ -235,12 +235,9 @@ void DirectVolume::handleDiskAdded(const char * /*devpath*/,
         mDiskNumParts = 1;
     }
 
-    int partmask = 0;
-    int i;
-    for (i = 1; i <= mDiskNumParts; i++) {
-        partmask |= (1 << i);
-    }
-    mPendingPartMap = partmask;
+    mPendingPartCount = mDiskNumParts;
+    for (int i = 0; i < MAX_PARTITIONS; i++)
+        mPartMinors[i] = -1;
 
     if (mDiskNumParts == 0) {
 #ifdef PARTITION_DEBUG
@@ -249,8 +246,7 @@ void DirectVolume::handleDiskAdded(const char * /*devpath*/,
         setState(Volume::State_Idle);
     } else {
 #ifdef PARTITION_DEBUG
-        SLOGD("Dv::diskIns - waiting for %d partitions (mask 0x%x)",
-             mDiskNumParts, mPendingPartMap);
+        SLOGD("Dv::diskIns - waiting for %d pending partitions", mPendingPartCount);
 #endif
         setState(Volume::State_Pending);
     }
@@ -299,11 +295,12 @@ void DirectVolume::handlePartitionAdded(const char *devpath, NetlinkEvent *evt) 
     if (part_num >= MAX_PARTITIONS) {
         SLOGE("Dv:partAdd: ignoring part_num = %d (max: %d)\n", part_num, MAX_PARTITIONS-1);
     } else {
+        if ((mPartMinors[part_num - 1] == -1) && mPendingPartCount)
+            mPendingPartCount--;
         mPartMinors[part_num -1] = minor;
     }
-    mPendingPartMap &= ~(1 << part_num);
 
-    if (!mPendingPartMap) {
+    if (!mPendingPartCount) {
 #ifdef PARTITION_DEBUG
         SLOGD("Dv:partAdd: Got all partitions - ready to rock!");
 #endif
@@ -316,7 +313,7 @@ void DirectVolume::handlePartitionAdded(const char *devpath, NetlinkEvent *evt) 
         }
     } else {
 #ifdef PARTITION_DEBUG
-        SLOGD("Dv:partAdd: pending mask now = 0x%x", mPendingPartMap);
+        SLOGD("Dv:partAdd: pending %d disk", mPendingPartCount);
 #endif
     }
 }
@@ -339,12 +336,9 @@ void DirectVolume::handleDiskChanged(const char * /*devpath*/,
         mDiskNumParts = 1;
     }
 
-    int partmask = 0;
-    int i;
-    for (i = 1; i <= mDiskNumParts; i++) {
-        partmask |= (1 << i);
-    }
-    mPendingPartMap = partmask;
+    mPendingPartCount = mDiskNumParts;
+    for (int i = 0; i < MAX_PARTITIONS; i++)
+        mPartMinors[i] = -1;
 
     if (getState() != Volume::State_Formatting) {
         if (mDiskNumParts == 0) {
